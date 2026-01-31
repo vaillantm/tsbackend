@@ -20,6 +20,6 @@ function fileFilter(_req: Express.Request, file: Express.Multer.File, cb: multer
 
 export const uploadImage = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 1 * 1024 * 1024 }, // 1MB
   fileFilter,
 });
