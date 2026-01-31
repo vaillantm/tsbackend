@@ -27,6 +27,9 @@ export const addToCart = asyncHandler(async (req: AuthRequest, res: Response) =>
     return res.status(401).json({ message: "Unauthorized: User not found" });
   }
   const { productId, quantity } = req.body;
+  const qty = Number(quantity ?? 1);
+  if (!productId) return res.status(400).json({ message: 'Product is required' });
+  if (!Number.isFinite(qty) || qty < 1) return res.status(400).json({ message: 'Quantity must be at least 1' });
   const product = await Product.findById(productId);
   if (!product) return res.status(404).json({ message: 'Product not found' });
   const cart = await getCart(req.user!.id);
@@ -36,27 +39,38 @@ export const addToCart = asyncHandler(async (req: AuthRequest, res: Response) =>
   }
 
   const idx = cart.items.findIndex((i) => i.productId.toString() === productId);
-  if (idx >= 0) cart.items[idx].quantity += Number(quantity || 1);
-  else cart.items.push({ productId: new Types.ObjectId(productId), quantity: Number(quantity || 1) });
+  const nextQuantity = idx >= 0 ? cart.items[idx].quantity + qty : qty;
+  if (product.quantity < nextQuantity) {
+    return res.status(400).json({ message: 'Insufficient stock' });
+  }
+  if (idx >= 0) cart.items[idx].quantity = nextQuantity;
+  else cart.items.push({ productId: new Types.ObjectId(productId), quantity: qty });
   await cart.save();
   res.json(cart);
 });
 
 export const updateQuantity = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { productId, quantity } = req.body;
+  const qty = Number(quantity);
+  if (!productId) return res.status(400).json({ message: 'Product is required' });
+  if (!Number.isFinite(qty) || qty < 1) return res.status(400).json({ message: 'Quantity must be at least 1' });
   const cart = await getCart(req.user!.id);
   if (!cart) {
     return res.status(500).json({ message: 'Cart not found for this user and could not be created.' });
   }
   const item = cart.items.find((i) => i.productId.toString() === productId);
   if (!item) return res.status(404).json({ message: 'Item not found' });
-  item.quantity = Number(quantity);
+  const product = await Product.findById(productId);
+  if (!product) return res.status(404).json({ message: 'Product not found' });
+  if (product.quantity < qty) return res.status(400).json({ message: 'Insufficient stock' });
+  item.quantity = qty;
   await cart.save();
   res.json(cart);
 });
 
 export const removeFromCart = asyncHandler(async (req: AuthRequest, res: Response) => {
   const { productId } = req.body;
+  if (!productId) return res.status(400).json({ message: 'Product is required' });
   const cart = await getCart(req.user!.id);
   if (!cart) {
     return res.status(500).json({ message: 'Cart not found for this user and could not be created.' });

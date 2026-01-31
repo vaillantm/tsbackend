@@ -23,4 +23,9 @@ const productSchema = new Schema<IProduct>(
   { timestamps: true }
 );
 
+productSchema.index({ name: 'text', description: 'text' });
+productSchema.index({ categoryId: 1 });
+productSchema.index({ price: 1 });
+productSchema.index({ quantity: 1 });
+
 export const Product = mongoose.model<IProduct>('Product', productSchema);

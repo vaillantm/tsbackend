@@ -15,6 +15,8 @@ import productRoutes from './routes/products.routes';
 import cartRoutes from './routes/cart.routes';
 import orderRoutes from './routes/orders.routes';
 import uploadRoutes from './routes/uploads.routes';
+import adminOrderRoutes from './routes/admin.orders.routes';
+import reviewRoutes from './routes/reviews.routes';
 
 const app = express();
 
@@ -60,7 +62,11 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
+app.use('/api/admin/orders', adminOrderRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/v1', reviewRoutes);
+app.use('/api/v1/products', productRoutes);
+app.use('/api/v1/users', userRoutes);
 
 // Error handling
 app.use(errorHandler);

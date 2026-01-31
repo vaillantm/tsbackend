@@ -44,7 +44,8 @@ function buildOpenApiSpec() {
       { name: 'Categories' },
       { name: 'Products' },
       { name: 'Cart' },
-      { name: 'Orders' }
+      { name: 'Orders' },
+      { name: 'Reviews' }
     ],
     components: {
       securitySchemes: { bearerAuth },
@@ -66,9 +67,14 @@ function buildSchemas() {
       properties: {
         id: { type: 'string' },
         name: { type: 'string' },
+        username: { type: 'string' },
         email: { type: 'string' },
         role: { type: 'string', enum: ['admin', 'vendor', 'customer'] },
-        avatar: { type: 'string' }
+        avatar: { type: 'string' },
+        resetPasswordToken: { type: 'string', nullable: true },
+        resetPasswordExpires: { type: 'string', format: 'date-time', nullable: true },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' }
       }
     },
     Category: {
@@ -79,7 +85,9 @@ function buildSchemas() {
         description: { type: 'string' },
         path: { type: 'string' },
         image: { type: 'string' },
-        createdBy: { type: 'string' }
+        createdBy: { type: 'string' },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' }
       },
       required: ['name', 'path']
     },
@@ -94,6 +102,8 @@ function buildSchemas() {
         images: { type: 'array', items: { type: 'string' } },
         categoryId: { type: 'string' },
         vendorId: { type: 'string' },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' }
       },
       required: ['name', 'price', 'quantity', 'categoryId']
     },
@@ -110,7 +120,9 @@ function buildSchemas() {
       properties: {
         id: { type: 'string' },
         userId: { type: 'string' },
-        items: { type: 'array', items: { $ref: '#/components/schemas/CartItem' } }
+        items: { type: 'array', items: { $ref: '#/components/schemas/CartItem' } },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' }
       }
     },
     OrderItem: {
@@ -130,6 +142,20 @@ function buildSchemas() {
         items: { type: 'array', items: { $ref: '#/components/schemas/OrderItem' } },
         totalAmount: { type: 'number' },
         status: { type: 'string', enum: ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'] },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' }
+      }
+    },
+    Review: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        productId: { type: 'string' },
+        userId: { type: 'string' },
+        rating: { type: 'number', minimum: 1, maximum: 5 },
+        comment: { type: 'string' },
+        createdAt: { type: 'string', format: 'date-time' },
+        updatedAt: { type: 'string', format: 'date-time' }
       }
     },
     Message: {
@@ -173,11 +199,12 @@ function buildPaths() {
               type: 'object',
               properties: {
                 name: { type: 'string' },
+                username: { type: 'string' },
                 email: { type: 'string' },
                 password: { type: 'string' },
                 role: { type: 'string', enum: ['admin', 'vendor', 'customer'] }
               },
-              required: ['name', 'email', 'password']
+              required: ['name', 'username', 'email', 'password']
             }
           } }
         },
@@ -193,8 +220,31 @@ function buildPaths() {
       }
     },
     '/api/auth/me': {
-      get: { tags: ['Auth'], summary: 'My profile', security: bearer(), responses: { '200': { description: 'OK' } } },
-      patch: { tags: ['Auth'], summary: 'Update own profile', security: bearer(), requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { name: { type: 'string' }, avatar: { type: 'string' } } } } } }, responses: { '200': { description: 'OK' } } }
+      get: { tags: ['Auth'], summary: 'My profile', security: bearer(), responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } } },
+      patch: {
+        tags: ['Auth'],
+        summary: 'Update own profile',
+        security: bearer(),
+        requestBody: {
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  username: { type: 'string' },
+                  avatar: { type: 'string', format: 'binary' }
+                }
+              }
+            },
+            'application/json': {
+              schema: { type: 'object', properties: { name: { type: 'string' }, username: { type: 'string' }, avatar: { type: 'string' } } }
+            }
+          }
+        },
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/User' } } } } }
+      },
+      delete: { tags: ['Auth'], summary: 'Delete own account', security: bearer(), responses: { '204': { description: 'No Content' } } }
     },
     '/api/auth/change-password': {
       post: { tags: ['Auth'], summary: 'Change password', security: bearer(), requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { currentPassword: { type: 'string' }, newPassword: { type: 'string' } }, required: ['currentPassword', 'newPassword'] } } } }, responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Message' } } } } } }
@@ -211,7 +261,34 @@ function buildPaths() {
 
     // Users (Admin)
     '/api/users': {
-      get: { tags: ['Users'], summary: 'List users', security: bearer(), responses: { '200': { description: 'OK', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/User' } } } } } } }
+      get: {
+        tags: ['Users'],
+        summary: 'List users',
+        security: bearer(),
+        parameters: [
+          { name: 'page', in: 'query', schema: { type: 'number' } },
+          { name: 'limit', in: 'query', schema: { type: 'number' } },
+          { name: 'sort', in: 'query', schema: { type: 'string' } }
+        ],
+        responses: {
+          '200': {
+            description: 'OK',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { type: 'array', items: { $ref: '#/components/schemas/User' } },
+                    page: { type: 'number' },
+                    limit: { type: 'number' },
+                    total: { type: 'number' }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     },
     '/api/users/{id}': {
       get: { tags: ['Users'], summary: 'Get user', security: bearer(), parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' }, '404': { description: 'Not found' } } },
@@ -281,7 +358,38 @@ function buildPaths() {
 
     // Products
     '/api/products': {
-      get: { tags: ['Products'], summary: 'List products', responses: { '200': { description: 'OK' } } },
+      get: {
+        tags: ['Products'],
+        summary: 'List products',
+        parameters: [
+          { name: 'page', in: 'query', schema: { type: 'number' } },
+          { name: 'limit', in: 'query', schema: { type: 'number' } },
+          { name: 'sort', in: 'query', schema: { type: 'string' } },
+          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'categoryId', in: 'query', schema: { type: 'string' } },
+          { name: 'minPrice', in: 'query', schema: { type: 'number' } },
+          { name: 'maxPrice', in: 'query', schema: { type: 'number' } },
+          { name: 'inStock', in: 'query', schema: { type: 'string', enum: ['true', 'false'] } }
+        ],
+        responses: {
+          '200': {
+            description: 'OK',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    data: { type: 'array', items: { $ref: '#/components/schemas/Product' } },
+                    page: { type: 'number' },
+                    limit: { type: 'number' },
+                    total: { type: 'number' }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
       post: {
         tags: ['Products'],
         summary: 'Create product (images optional)',
@@ -313,47 +421,181 @@ function buildPaths() {
     },
     '/api/products/{id}': {
       get: { tags: ['Products'], summary: 'Get product', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' }, '404': { description: 'Not found' } } },
-      patch: { tags: ['Products'], summary: 'Update product', security: bearer(), parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], requestBody: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Product' } } } }, responses: { '200': { description: 'OK' } } },
+      patch: {
+        tags: ['Products'],
+        summary: 'Update product',
+        security: bearer(),
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: {
+          content: {
+            'multipart/form-data': {
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                  price: { type: 'number' },
+                  quantity: { type: 'number' },
+                  categoryId: { type: 'string' },
+                  images: { type: 'array', items: { type: 'string', format: 'binary' } }
+                }
+              }
+            },
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Product' }
+            }
+          }
+        },
+        responses: { '200': { description: 'OK' } }
+      },
       delete: { tags: ['Products'], summary: 'Delete product', security: bearer(), parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '204': { description: 'No Content' } } }
+    },
+    '/api/products/stats': {
+      get: { tags: ['Products'], summary: 'Product stats', responses: { '200': { description: 'OK' } } }
+    },
+    '/api/products/top': {
+      get: { tags: ['Products'], summary: 'Top 10 most expensive products', responses: { '200': { description: 'OK' } } }
+    },
+    '/api/products/low-stock': {
+      get: {
+        tags: ['Products'],
+        summary: 'Low stock products',
+        parameters: [{ name: 'threshold', in: 'query', schema: { type: 'number' } }],
+        responses: { '200': { description: 'OK' } }
+      }
+    },
+    '/api/products/price-distribution': {
+      get: {
+        tags: ['Products'],
+        summary: 'Price distribution',
+        parameters: [{ name: 'buckets', in: 'query', schema: { type: 'number' } }],
+        responses: { '200': { description: 'OK' } }
+      }
     },
 
     // Cart (all authenticated)
     '/api/cart': {
-      get: { tags: ['Cart'], summary: 'Get my cart', security: bearer(), responses: { '200': { description: 'OK' } } }
+      get: {
+        tags: ['Cart'],
+        summary: 'Get my cart',
+        security: bearer(),
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Cart' } } } } }
+      }
     },
     '/api/cart/add': {
-      post: { tags: ['Cart'], summary: 'Add to cart', security: bearer(), requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { productId: { type: 'string' }, quantity: { type: 'number' } }, required: ['productId'] } } } }, responses: { '200': { description: 'OK' } } }
+      post: {
+        tags: ['Cart'],
+        summary: 'Add to cart',
+        security: bearer(),
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { type: 'object', properties: { productId: { type: 'string' }, quantity: { type: 'number' } }, required: ['productId'] } } }
+        },
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Cart' } } } } }
+      }
     },
     '/api/cart/quantity': {
-      patch: { tags: ['Cart'], summary: 'Update quantity', security: bearer(), requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { productId: { type: 'string' }, quantity: { type: 'number' } }, required: ['productId', 'quantity'] } } } }, responses: { '200': { description: 'OK' } } }
+      patch: {
+        tags: ['Cart'],
+        summary: 'Update quantity',
+        security: bearer(),
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { type: 'object', properties: { productId: { type: 'string' }, quantity: { type: 'number' } }, required: ['productId', 'quantity'] } } }
+        },
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Cart' } } } } }
+      }
     },
     '/api/cart/remove': {
-      delete: { tags: ['Cart'], summary: 'Remove from cart', security: bearer(), requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { productId: { type: 'string' } }, required: ['productId'] } } } }, responses: { '200': { description: 'OK' } } }
+      delete: {
+        tags: ['Cart'],
+        summary: 'Remove from cart',
+        security: bearer(),
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { productId: { type: 'string' } }, required: ['productId'] } } } },
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Cart' } } } } }
+      }
     },
     '/api/cart/clear': {
-      delete: { tags: ['Cart'], summary: 'Clear cart', security: bearer(), responses: { '200': { description: 'OK' } } }
+      delete: {
+        tags: ['Cart'],
+        summary: 'Clear cart',
+        security: bearer(),
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Cart' } } } } }
+      }
     },
 
     // Orders
     '/api/orders': {
-      post: { tags: ['Orders'], summary: 'Create order from cart', security: bearer(), responses: { '201': { description: 'Created' }, '400': { description: 'Cart is empty' } } },
-      get: { tags: ['Orders'], summary: 'My orders', security: bearer(), responses: { '200': { description: 'OK' } } }
+      post: {
+        tags: ['Orders'],
+        summary: 'Create order from cart',
+        security: bearer(),
+        responses: { '201': { description: 'Created', content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } }, '400': { description: 'Cart is empty' } }
+      },
+      get: {
+        tags: ['Orders'],
+        summary: 'My orders',
+        security: bearer(),
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Order' } } } } } }
+      }
     },
     '/api/orders/{id}': {
-      get: { tags: ['Orders'], summary: 'Get my order', security: bearer(), parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' }, '404': { description: 'Not found' } } }
+      get: {
+        tags: ['Orders'],
+        summary: 'Get my order',
+        security: bearer(),
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } }, '404': { description: 'Not found' } }
+      }
     },
     '/api/orders/{id}/cancel': {
-      patch: { tags: ['Orders'], summary: 'Cancel my order (pending only)', security: bearer(), parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' }, '400': { description: 'Cannot cancel' } } }
+      patch: {
+        tags: ['Orders'],
+        summary: 'Cancel my order (pending only)',
+        security: bearer(),
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } }, '400': { description: 'Cannot cancel' } }
+      }
     },
 
     // Admin orders (reflecting current routing under /api/orders/admin/*)
     '/api/orders/admin/all': {
-      get: { tags: ['Orders'], summary: 'Admin list all orders', security: bearer(), responses: { '200': { description: 'OK' } } }
+      get: {
+        tags: ['Orders'],
+        summary: 'Admin list all orders',
+        security: bearer(),
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Order' } } } } } }
+      }
     },
     '/api/orders/admin/{id}/status': {
-      patch: { tags: ['Orders'], summary: 'Admin update order status', security: bearer(), parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { status: { type: 'string', enum: ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'] } }, required: ['status'] } } } }, responses: { '200': { description: 'OK' } } }
+      patch: {
+        tags: ['Orders'],
+        summary: 'Admin update order status',
+        security: bearer(),
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { status: { type: 'string', enum: ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'] } }, required: ['status'] } } } },
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } } }
+      }
     }
     ,
+    '/api/admin/orders': {
+      get: {
+        tags: ['Orders'],
+        summary: 'Admin list all orders',
+        security: bearer(),
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { type: 'array', items: { $ref: '#/components/schemas/Order' } } } } } }
+      }
+    },
+    '/api/admin/orders/{id}/status': {
+      patch: {
+        tags: ['Orders'],
+        summary: 'Admin update order status',
+        security: bearer(),
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: { status: { type: 'string', enum: ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'] } }, required: ['status'] } } } },
+        responses: { '200': { description: 'OK', content: { 'application/json': { schema: { $ref: '#/components/schemas/Order' } } } } }
+      }
+    },
 
     // Uploads
     '/api/uploads/profile': {
@@ -371,6 +613,42 @@ function buildPaths() {
         },
         responses: { '201': { description: 'Uploaded' }, '400': { description: 'No file uploaded' } }
       }
+    },
+    '/api/v1/products': {
+      get: { tags: ['Products'], summary: 'List products (v1)', responses: { '200': { description: 'OK' } } }
+    },
+    '/api/v1/products/stats': {
+      get: { tags: ['Products'], summary: 'Product stats (v1)', responses: { '200': { description: 'OK' } } }
+    },
+    '/api/v1/products/top': {
+      get: { tags: ['Products'], summary: 'Top products (v1)', responses: { '200': { description: 'OK' } } }
+    },
+    '/api/v1/products/low-stock': {
+      get: { tags: ['Products'], summary: 'Low stock products (v1)', responses: { '200': { description: 'OK' } } }
+    },
+    '/api/v1/products/price-distribution': {
+      get: { tags: ['Products'], summary: 'Price distribution (v1)', responses: { '200': { description: 'OK' } } }
+    },
+    '/api/v1/users': {
+      get: { tags: ['Users'], summary: 'List users (v1)', security: bearer(), responses: { '200': { description: 'OK' } } }
+    },
+    '/api/v1/reviews': {
+      post: {
+        tags: ['Reviews'],
+        summary: 'Create review',
+        security: bearer(),
+        requestBody: {
+          required: true,
+          content: { 'application/json': { schema: { type: 'object', properties: { productId: { type: 'string' }, rating: { type: 'number' }, comment: { type: 'string' } }, required: ['productId', 'rating'] } } }
+        },
+        responses: { '201': { description: 'Created', content: { 'application/json': { schema: { $ref: '#/components/schemas/Review' } } } } }
+      }
+    },
+    '/api/v1/products/{productId}/reviews': {
+      get: { tags: ['Reviews'], summary: 'Get reviews for a product', parameters: [{ name: 'productId', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': { description: 'OK' } } }
+    },
+    '/api/v1/users/me/reviews': {
+      get: { tags: ['Reviews'], summary: 'Get my reviews', security: bearer(), responses: { '200': { description: 'OK' } } }
     },
     
   } as const;

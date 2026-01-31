@@ -9,7 +9,10 @@
     "start": "node dist/server.js",
     "start:dev": "nodemon dist/server.js",
     "dev": "concurrently \"npm run build:watch\" \"npm run start:dev\"",
-    "lint": "echo 'add linter if needed'"
+    "lint": "echo 'add linter if needed'",
+    "seed:users": "ts-node-dev --transpile-only src/seeders/seedUsers.ts",
+    "seed:products": "ts-node-dev --transpile-only src/seeders/seedProducts.ts",
+    "seed:reviews": "ts-node-dev --transpile-only src/seeders/seedReviews.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
