@@ -72,6 +72,9 @@ export const getMyOrders = asyncHandler(async (req: AuthRequest, res: Response) 
 });
 
 export const getOrder = asyncHandler(async (req: AuthRequest, res: Response) => {
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid order id' });
+  }
   const order = await Order.findById(req.params.id);
   if (!order || order.userId.toString() !== req.user!.id) return res.status(404).json({ message: 'Not found' });
   res.json(order);
@@ -81,6 +84,10 @@ export const cancelOrder = asyncHandler(async (req: AuthRequest, res: Response) 
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Invalid order id' });
+    }
     const order = await Order.findById(req.params.id).session(session);
     if (!order || order.userId.toString() !== req.user!.id) {
       await session.abortTransaction();
@@ -122,6 +129,9 @@ export const adminUpdateStatus = asyncHandler(async (req: Request, res: Response
   const allowedStatuses = ['pending', 'confirmed', 'shipped', 'delivered', 'cancelled'];
   if (!allowedStatuses.includes(status)) {
     return res.status(400).json({ message: 'Invalid status' });
+  }
+  if (!mongoose.isValidObjectId(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid order id' });
   }
   const existing = await Order.findById(req.params.id);
   if (!existing) return res.status(404).json({ message: 'Not found' });
