@@ -25,10 +25,12 @@ app.use(helmet());
 
 // CORS setup for frontend with credentials
 app.use(cors({
-  origin: 'http://localhost:5173', // frontend origin
+  origin: [
+    'http://localhost:5173', 
+    'https://tsxfrontend.vercel.app' // added to array
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true // allow cookies/auth headers
+  credentials: true // Required since you mentioned 'with credentials'
 }));
 
 // Handle preflight requests explicitly
