@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const auth_1 = require("../middleware/auth");
+const reviews_controller_1 = require("../controllers/reviews.controller");
+const router = (0, express_1.Router)();
+router.post('/reviews', auth_1.authenticate, (0, auth_1.authorize)('customer'), reviews_controller_1.createReview);
+router.get('/products/:productId/reviews', reviews_controller_1.getProductReviews);
+router.get('/users/me/reviews', auth_1.authenticate, reviews_controller_1.getMyReviews);
+exports.default = router;
