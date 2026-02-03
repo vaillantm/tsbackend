@@ -2,11 +2,11 @@ import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
 import path from 'path';
+import helmet from 'helmet';
 import { config } from './config/env';
 import { errorHandler } from './middleware/error';
 import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './swagger';
-import helmet from 'helmet';
 
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/users.routes';
@@ -20,44 +20,44 @@ import reviewRoutes from './routes/reviews.routes';
 
 const app = express();
 
-// Security headers
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+}));
 
-// CORS setup for frontend with credentials
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://tsxfrontend.vercel.app',
+];
+
 app.use(cors({
-  origin: [
-    'http://localhost:5173', 
-    'https://tsxfrontend.vercel.app' // added to array
-  ],
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  credentials: true // Required since you mentioned 'with credentials'
+  credentials: true,
+  optionsSuccessStatus: 200
 }));
 
-// Handle preflight requests explicitly
-app.options('*', cors({
-  origin: 'http://localhost:5173',
-  credentials: true
-}));
-
-// Logging
 app.use(morgan('dev'));
-
-// Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Swagger/OpenAPI docs
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-app.get('/api-docs.json', (_req, res) => res.json(swaggerSpec));
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Health check
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
+  res.status(200).json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV 
+  });
 });
 
-// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/categories', categoryRoutes);
@@ -66,11 +66,15 @@ app.use('/api/cart', cartRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/admin/orders', adminOrderRoutes);
 app.use('/api/uploads', uploadRoutes);
-app.use('/api/v1', reviewRoutes);
+
+app.use('/api/v1/reviews', reviewRoutes);
 app.use('/api/v1/products', productRoutes);
 app.use('/api/v1/users', userRoutes);
 
-// Error handling
+app.use((_req, res) => {
+  res.status(404).json({ message: "Route not found" });
+});
+
 app.use(errorHandler);
 
 export default app;
